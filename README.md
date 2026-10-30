@@ -31,10 +31,8 @@ Quality guidance stays: only the mechanical parts get automated, and the agent k
 
 ## Install
 
-Copy this folder into your skills directory:
-
 ```bash
-git clone https://github.com/CodeSquar/skill-optimizer.git ~/.claude/skills/skill-optimizer
+npx skills add CodeSquar/skill-optimizer
 ```
 
 Then ask Claude Code something like *"optimize my video-edit skill, here's the last run"* or *"why did that skill take 20 minutes?"*.
