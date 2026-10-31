@@ -5,7 +5,7 @@
 
 PROJECT_DIR (e.g. ~/.claude/projects/<cwd with / \\ : as ->) takes its newest .jsonl.
 --turn N measures from the Nth user message to the next one (default: the whole file).
-Prints: wall time, model turns, tool calls by name, tokens, the slowest calls, the longest
+Prints: wall time (minus the time the person took to send each later message), model turns, tool calls by name, tokens, the slowest calls, the longest
 waits between calls (model thinking/writing), the biggest tool outputs and files read twice.
 """
 import argparse, collections, glob, json, os, sys
@@ -65,8 +65,16 @@ for r in win:
             results[p["tool_use_id"]] = (ts(r["timestamp"]), size(p.get("content")))
 
 start, end = ts(win[0]["timestamp"]), ts(win[-1]["timestamp"])
+# time the person took to write each later message is theirs, not the run's: out of wall and waits
+ask_ts = [ts(r["timestamp"]) for r in asks if start < ts(r["timestamp"]) <= end]
+idle = 0.0
+for at in ask_ts:
+    before = [ts(r["timestamp"]) for r in win if ts(r["timestamp"]) < at]
+    if before:
+        idle += (at - max(before)).total_seconds()
 u = lambda k: sum(x.get(k, 0) for x in usage.values())
-print(f"\nwall {(end - start).total_seconds():.0f}s  turns {len(usage)}  tool calls {len(calls)}  "
+idle_note = f" (+{idle:.0f}s waiting on the person, excluded)" if idle else ""
+print(f"\nwall {(end - start).total_seconds() - idle:.0f}s{idle_note}  turns {len(usage)}  tool calls {len(calls)}  "
       f"output {u('output_tokens'):,}  cache read {u('cache_read_input_tokens'):,}  "
       f"cache write {u('cache_creation_input_tokens'):,}  input {u('input_tokens'):,}")
 print("calls:", dict(collections.Counter(n for _, n, _ in calls.values()).most_common()))
@@ -80,9 +88,9 @@ print(f"\nbiggest outputs (chars):")
 for d, t, n, i, s in sorted(done, key=lambda x: -x[4])[:a.top]:
     print(f"  {s:7,}  {line(t, n, i)}")
 
-# model time: from a call's result (or the start) to the next call
-events = sorted([(t, "call", n, i) for t, n, i in calls.values()] + [(t, "res", None, None) for t, _ in results.values()],
-                key=lambda e: e[0])
+# model time: from a call's result, the start or a person's message to the next call
+events = sorted([(t, "call", n, i) for t, n, i in calls.values()] + [(t, "res", None, None) for t, _ in results.values()]
+                + [(t, "ask", None, None) for t in ask_ts], key=lambda e: e[0])
 gaps, prev = [], start
 for t, kind, n, i in events:
     if kind == "call":
